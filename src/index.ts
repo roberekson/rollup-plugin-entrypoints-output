@@ -1,5 +1,36 @@
+import { OutputOptions, InternalModuleFormat, InputOptions, InputOption, Plugin } from 'rollup/dist/rollup';
+
 const jsonfile = require('jsonfile');
 const path = require('path');
+
+type EntrypointUrl = string;
+type EntrypointCssUrl = EntrypointUrl;
+type EntrypointJavascriptUrl = EntrypointUrl;
+
+enum FileType {
+    css = 'css',
+    js = 'js',
+    map = 'map',
+    other = 'other',
+};
+
+type EntrypointJavaScriptFormats = InternalModuleFormat;
+
+// TODO: Improve typing on key
+type EntrypointJavaScript = {
+    [key: string]: Set<EntrypointJavascriptUrl>;
+}
+// type EntrypointJavaScript = <EntrypointJavaScriptFormats, Set<EntrypointJavascriptUrl>>;
+
+interface EntrypointFileTypes {
+    js?: EntrypointJavaScript;
+    css?: Set<EntrypointCssUrl>;
+    other?: Record<string, string>;
+}
+
+interface Entrypoint {
+    [key: string]: EntrypointFileTypes;
+}
 
 interface ModuleOptions {
     outFile: string,
@@ -9,18 +40,11 @@ const defaultOptions: ModuleOptions = {
     outFile: '',
 };
 
-enum FileType {
-    css = 'css',
-    js = 'js',
-    map = 'map',
-    other = 'other',
-};
-
 const entrypoints = new Map;
 let outFile = '';
-let json: Record<string, any>;
+let json: Entrypoint;
 
-const createBuildStart = (moduleOptions: ModuleOptions) => (options) => {
+const createBuildStart = (moduleOptions: ModuleOptions) => (options: InputOptions) => {
     if (!outFile.length) {
         outFile = path.resolve(process.cwd(), moduleOptions.outFile);
     }
@@ -34,12 +58,12 @@ const createBuildStart = (moduleOptions: ModuleOptions) => (options) => {
     });
 };
 
-const getEntrypointName = (filepath: string): string => {
-    const matches = filepath.match(/([a-z0-9-]+)\.ts/i);
-    return matches[1].length ? matches[1] : filepath;
+const getEntrypointName = (filepath: InputOption): string => {
+    const matches = (<string>filepath).match(/([a-z0-9-]+)\.ts/i);
+    return (matches[1].length ? matches[1] : filepath) as string;
 }
 
-const createWriteBundle = (moduleOptions: ModuleOptions) => (options: Record<string, any>, bundle): void => {
+const createWriteBundle = (moduleOptions: ModuleOptions) => (options: OutputOptions, bundle): void => {
     let bundleName = '';
 
     if (typeof json === 'undefined') {
@@ -58,23 +82,23 @@ const createWriteBundle = (moduleOptions: ModuleOptions) => (options: Record<str
                 json[bundleName] = {};
             }
 
-            if (type === FileType.js) {
-                if (typeof json[bundleName][type] === 'undefined') {
-                    json[bundleName][type] = {};
+            if (isJavaScriptEntrypoint(filepath)) {
+                if (typeof json[bundleName]['js'] === 'undefined') {
+                    json[bundleName][FileType.js] = {};
                 }
 
-                if (typeof json[bundleName][type][options.format] === 'undefined') {
-                    json[bundleName][type][options.format] = new Set;
+                if (typeof json[bundleName][FileType.js][options.format] === 'undefined') {
+                    json[bundleName][FileType.js][options.format] = new Set;
                 }
 
                 json[bundleName][type][options.format].add(`${options.dir}/${filepath}`);
 
             } else {
                 if (typeof json[bundleName][type] === 'undefined') {
-                    json[bundleName][type] = new Set;
+                    json[bundleName][FileType.css] = new Set;
                 }
 
-                json[bundleName][type].add(`${options.dir}/${filepath}`);
+                json[bundleName][FileType.css].add(`${options.dir}/${filepath}`);
             }
         }
     }
@@ -85,7 +109,16 @@ const createWriteBundle = (moduleOptions: ModuleOptions) => (options: Record<str
      });
 }
 
-const jsonReplacer = (key, value) => {
+const isJavaScriptEntrypoint = (entrypoint: EntrypointUrl): entrypoint is EntrypointJavascriptUrl => {
+    const type = getFileType(entrypoint);
+
+    if (type === FileType.js) {
+        return true;
+    }
+    return false;
+}
+
+const jsonReplacer = <T>(key: string, value: T): T | string[] => {
     if (typeof value === 'object' && value instanceof Set) {
         return Array.from(value);
     }
@@ -106,8 +139,8 @@ const getFileType = (filepath: string): FileType => {
     }
 }
 
-export default (options = {}) => {
-    const moduleOptions = {
+export default (options: ModuleOptions = defaultOptions): Plugin => {
+    const moduleOptions: ModuleOptions = {
         ...defaultOptions,
         ...options,
     };

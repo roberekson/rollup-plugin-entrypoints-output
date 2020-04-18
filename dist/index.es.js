@@ -26,9 +26,6 @@ var __assign = function() {
 
 var jsonfile = require('jsonfile');
 var path = require('path');
-var defaultOptions = {
-    outFile: ''
-};
 var FileType;
 (function (FileType) {
     FileType["css"] = "css";
@@ -36,6 +33,9 @@ var FileType;
     FileType["map"] = "map";
     FileType["other"] = "other";
 })(FileType || (FileType = {}));
+var defaultOptions = {
+    outFile: ''
+};
 var entrypoints = new Map;
 var outFile = '';
 var json;
@@ -53,7 +53,7 @@ var createBuildStart = function (moduleOptions) { return function (options) {
 }; };
 var getEntrypointName = function (filepath) {
     var matches = filepath.match(/([a-z0-9-]+)\.ts/i);
-    return matches[1].length ? matches[1] : filepath;
+    return (matches[1].length ? matches[1] : filepath);
 };
 var createWriteBundle = function (moduleOptions) { return function (options, bundle) {
     var bundleName = '';
@@ -69,20 +69,20 @@ var createWriteBundle = function (moduleOptions) { return function (options, bun
             if (typeof json[bundleName] === 'undefined') {
                 json[bundleName] = {};
             }
-            if (type === FileType.js) {
-                if (typeof json[bundleName][type] === 'undefined') {
-                    json[bundleName][type] = {};
+            if (isJavaScriptEntrypoint(filepath)) {
+                if (typeof json[bundleName]['js'] === 'undefined') {
+                    json[bundleName][FileType.js] = {};
                 }
-                if (typeof json[bundleName][type][options.format] === 'undefined') {
-                    json[bundleName][type][options.format] = new Set;
+                if (typeof json[bundleName][FileType.js][options.format] === 'undefined') {
+                    json[bundleName][FileType.js][options.format] = new Set;
                 }
                 json[bundleName][type][options.format].add(options.dir + "/" + filepath);
             }
             else {
                 if (typeof json[bundleName][type] === 'undefined') {
-                    json[bundleName][type] = new Set;
+                    json[bundleName][FileType.css] = new Set;
                 }
-                json[bundleName][type].add(options.dir + "/" + filepath);
+                json[bundleName][FileType.css].add(options.dir + "/" + filepath);
             }
         }
     }
@@ -91,6 +91,13 @@ var createWriteBundle = function (moduleOptions) { return function (options, bun
         replacer: jsonReplacer
     });
 }; };
+var isJavaScriptEntrypoint = function (entrypoint) {
+    var type = getFileType(entrypoint);
+    if (type === FileType.js) {
+        return true;
+    }
+    return false;
+};
 var jsonReplacer = function (key, value) {
     if (typeof value === 'object' && value instanceof Set) {
         return Array.from(value);
@@ -110,7 +117,7 @@ var getFileType = function (filepath) {
     }
 };
 var index = (function (options) {
-    if (options === void 0) { options = {}; }
+    if (options === void 0) { options = defaultOptions; }
     var moduleOptions = __assign(__assign({}, defaultOptions), options);
     return {
         name: 'entrypoints-output',
