@@ -1,6 +1,6 @@
 {
   "name": "rollup-plugin-entrypoints-output",
-  "version": "1.0.0-alpha.1",
+  "version": "1.0.0-beta.1",
   "description": "A Rollup plugin for generating a JSON file containing the outputs for each input/entrypoint",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
