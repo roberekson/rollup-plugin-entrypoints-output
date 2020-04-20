@@ -34,6 +34,7 @@ interface Entrypoint {
 
 interface ModuleOptions {
     outFile: string,
+    rootDir?: string,
 }
 
 const defaultOptions: ModuleOptions = {
@@ -69,9 +70,10 @@ const createWriteBundle = (moduleOptions: ModuleOptions) => (options: OutputOpti
     if (typeof json === 'undefined') {
         json = {};
     }
-
+    
     for (const filepath in bundle) {
         const type = getFileType(filepath);
+        const rootDir = moduleOptions.rootDir || options.dir;
 
         if (bundle[filepath].isEntry) {
             bundleName = bundle[filepath].name;
@@ -91,14 +93,14 @@ const createWriteBundle = (moduleOptions: ModuleOptions) => (options: OutputOpti
                     json[bundleName][FileType.js][options.format] = new Set;
                 }
 
-                json[bundleName][type][options.format].add(`${options.dir}/${filepath}`);
+                json[bundleName][type][options.format].add(`${rootDir}/${filepath}`);
 
             } else {
                 if (typeof json[bundleName][type] === 'undefined') {
                     json[bundleName][FileType.css] = new Set;
                 }
 
-                json[bundleName][FileType.css].add(`${options.dir}/${filepath}`);
+                json[bundleName][FileType.css].add(`${rootDir}/${filepath}`);
             }
         }
     }

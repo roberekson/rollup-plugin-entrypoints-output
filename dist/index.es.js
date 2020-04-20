@@ -62,6 +62,7 @@ var createWriteBundle = function (moduleOptions) { return function (options, bun
     }
     for (var filepath in bundle) {
         var type = getFileType(filepath);
+        var rootDir = moduleOptions.rootDir || options.dir;
         if (bundle[filepath].isEntry) {
             bundleName = bundle[filepath].name;
         }
@@ -76,13 +77,13 @@ var createWriteBundle = function (moduleOptions) { return function (options, bun
                 if (typeof json[bundleName][FileType.js][options.format] === 'undefined') {
                     json[bundleName][FileType.js][options.format] = new Set;
                 }
-                json[bundleName][type][options.format].add(options.dir + "/" + filepath);
+                json[bundleName][type][options.format].add(rootDir + "/" + filepath);
             }
             else {
                 if (typeof json[bundleName][type] === 'undefined') {
                     json[bundleName][FileType.css] = new Set;
                 }
-                json[bundleName][FileType.css].add(options.dir + "/" + filepath);
+                json[bundleName][FileType.css].add(rootDir + "/" + filepath);
             }
         }
     }
