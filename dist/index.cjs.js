@@ -26,7 +26,8 @@ var __assign = function() {
     return __assign.apply(this, arguments);
 };
 
-var crypto = require('crypto');
+var sriToolbox = require('sri-toolbox');
+var fs = require('fs');
 var jsonfile = require('jsonfile');
 var path = require('path');
 var FileType;
@@ -63,7 +64,12 @@ var getEntrypointName = function (filepath) {
 var createWriteBundle = function (moduleOptions) { return function (options, bundle) {
     var bundleName = '';
     if (typeof json === 'undefined') {
-        json = {};
+        json = {
+            entrypoints: {}
+        };
+        if (moduleOptions.integrityHash) {
+            json['integrity'] = {};
+        }
     }
     for (var filepath in bundle) {
         var type = getFileType(filepath);
@@ -72,30 +78,30 @@ var createWriteBundle = function (moduleOptions) { return function (options, bun
             bundleName = bundle[filepath].name;
         }
         if (type !== FileType.map) {
-            if (typeof json[bundleName] === 'undefined') {
-                json[bundleName] = {};
+            if (typeof json['entrypoints'][bundleName] === 'undefined') {
+                json['entrypoints'][bundleName] = {};
             }
             var relPath = rootDir + "/" + filepath;
             if (moduleOptions.integrityHash && bundle[filepath].isEntry) {
-                hashes[relPath] = "sha384-" + crypto.createHash('sha384').update(bundle[filepath].code).digest('base64');
+                hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(options.dir + "/" + filepath));
             }
             else {
-                hashes[relPath] = "sha384-" + crypto.createHash('sha384').update(bundle[filepath].source).digest('base64');
+                hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(options.dir + "/" + bundle[filepath].fileName));
             }
             if (isJavaScriptEntrypoint(filepath)) {
-                if (typeof json[bundleName]['js'] === 'undefined') {
-                    json[bundleName][FileType.js] = {};
+                if (typeof json['entrypoints'][bundleName]['js'] === 'undefined') {
+                    json['entrypoints'][bundleName][FileType.js] = {};
                 }
-                if (typeof json[bundleName][FileType.js][options.format] === 'undefined') {
-                    json[bundleName][FileType.js][options.format] = new Set;
+                if (typeof json['entrypoints'][bundleName][FileType.js][options.format] === 'undefined') {
+                    json['entrypoints'][bundleName][FileType.js][options.format] = new Set;
                 }
-                json[bundleName][type][options.format].add(relPath);
+                json['entrypoints'][bundleName][type][options.format].add(relPath);
             }
             else {
-                if (typeof json[bundleName][type] === 'undefined') {
-                    json[bundleName][FileType.css] = new Set;
+                if (typeof json['entrypoints'][bundleName][type] === 'undefined') {
+                    json['entrypoints'][bundleName][FileType.css] = new Set;
                 }
-                json[bundleName][FileType.css].add(relPath);
+                json['entrypoints'][bundleName][FileType.css].add(relPath);
             }
         }
     }

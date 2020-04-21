@@ -1,6 +1,7 @@
 import { OutputOptions, InternalModuleFormat, InputOptions, InputOption, Plugin } from 'rollup/dist/rollup';
 
-const crypto = require('crypto');
+const sriToolbox = require('sri-toolbox');
+const fs = require('fs');
 
 const jsonfile = require('jsonfile');
 const path = require('path');
@@ -31,7 +32,8 @@ interface EntrypointFileTypes {
 }
 
 interface Entrypoint {
-    [key: string]: EntrypointFileTypes | any;
+    entrypoints: Record<string, EntrypointFileTypes>;
+    integrity?: Record<string, string>;
 }
 
 interface ModuleOptions {
@@ -73,7 +75,13 @@ const createWriteBundle = (moduleOptions: ModuleOptions) => (options: OutputOpti
     let bundleName = '';
 
     if (typeof json === 'undefined') {
-        json = {};
+        json = {
+            entrypoints: {},
+        };
+
+        if (moduleOptions.integrityHash) {
+            json['integrity'] = {};
+        }
     }
     
     for (const filepath in bundle) {
@@ -85,34 +93,34 @@ const createWriteBundle = (moduleOptions: ModuleOptions) => (options: OutputOpti
         }
 
         if (type !== FileType.map) {
-            if (typeof json[bundleName] === 'undefined') {
-                json[bundleName] = {};
+            if (typeof json['entrypoints'][bundleName] === 'undefined') {
+                json['entrypoints'][bundleName] = {};
             }
 
             const relPath = `${rootDir}/${filepath}`;
 
             if (moduleOptions.integrityHash && bundle[filepath].isEntry) {
-                hashes[relPath] = `sha384-${crypto.createHash('sha384').update(bundle[filepath].code).digest('base64')}`;
+                hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(`${options.dir}/${filepath}`));
             } else {
-                hashes[relPath] = `sha384-${crypto.createHash('sha384').update(bundle[filepath].source).digest('base64')}`;
+                hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(`${options.dir}/${bundle[filepath].fileName}`));
             }
 
             if (isJavaScriptEntrypoint(filepath)) {
-                if (typeof json[bundleName]['js'] === 'undefined') {
-                    json[bundleName][FileType.js] = {};
+                if (typeof json['entrypoints'][bundleName]['js'] === 'undefined') {
+                    json['entrypoints'][bundleName][FileType.js] = {};
                 }
 
-                if (typeof json[bundleName][FileType.js][options.format] === 'undefined') {
-                    json[bundleName][FileType.js][options.format] = new Set;
+                if (typeof json['entrypoints'][bundleName][FileType.js][options.format] === 'undefined') {
+                    json['entrypoints'][bundleName][FileType.js][options.format] = new Set;
                 }
 
-                json[bundleName][type][options.format].add(relPath);
+                json['entrypoints'][bundleName][type][options.format].add(relPath);
             } else {
-                if (typeof json[bundleName][type] === 'undefined') {
-                    json[bundleName][FileType.css] = new Set;
+                if (typeof json['entrypoints'][bundleName][type] === 'undefined') {
+                    json['entrypoints'][bundleName][FileType.css] = new Set;
                 }
 
-                json[bundleName][FileType.css].add(relPath);
+                json['entrypoints'][bundleName][FileType.css].add(relPath);
             }
         }
     }
