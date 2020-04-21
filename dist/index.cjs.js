@@ -26,6 +26,7 @@ var __assign = function() {
     return __assign.apply(this, arguments);
 };
 
+var crypto = require('crypto');
 var jsonfile = require('jsonfile');
 var path = require('path');
 var FileType;
@@ -36,11 +37,13 @@ var FileType;
     FileType["other"] = "other";
 })(FileType || (FileType = {}));
 var defaultOptions = {
-    outFile: ''
+    outFile: '',
+    integrityHash: false
 };
 var entrypoints = new Map;
 var outFile = '';
 var json;
+var hashes = {};
 var createBuildStart = function (moduleOptions) { return function (options) {
     if (!outFile.length) {
         outFile = path.resolve(process.cwd(), moduleOptions.outFile);
@@ -72,6 +75,13 @@ var createWriteBundle = function (moduleOptions) { return function (options, bun
             if (typeof json[bundleName] === 'undefined') {
                 json[bundleName] = {};
             }
+            var relPath = rootDir + "/" + filepath;
+            if (moduleOptions.integrityHash && bundle[filepath].isEntry) {
+                hashes[relPath] = "sha384-" + crypto.createHash('sha384').update(bundle[filepath].code).digest('base64');
+            }
+            else {
+                hashes[relPath] = "sha384-" + crypto.createHash('sha384').update(bundle[filepath].source).digest('base64');
+            }
             if (isJavaScriptEntrypoint(filepath)) {
                 if (typeof json[bundleName]['js'] === 'undefined') {
                     json[bundleName][FileType.js] = {};
@@ -79,15 +89,18 @@ var createWriteBundle = function (moduleOptions) { return function (options, bun
                 if (typeof json[bundleName][FileType.js][options.format] === 'undefined') {
                     json[bundleName][FileType.js][options.format] = new Set;
                 }
-                json[bundleName][type][options.format].add(rootDir + "/" + filepath);
+                json[bundleName][type][options.format].add(relPath);
             }
             else {
                 if (typeof json[bundleName][type] === 'undefined') {
                     json[bundleName][FileType.css] = new Set;
                 }
-                json[bundleName][FileType.css].add(rootDir + "/" + filepath);
+                json[bundleName][FileType.css].add(relPath);
             }
         }
+    }
+    if (moduleOptions.integrityHash) {
+        json.integrity = hashes;
     }
     jsonfile.writeFileSync(moduleOptions.outFile, json, {
         spaces: 2,
