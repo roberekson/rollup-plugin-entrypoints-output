@@ -40,17 +40,19 @@ interface ModuleOptions {
     outFile: string,
     rootDir?: string,
     integrityHash?: boolean,
+    modifyFile?: boolean,
 }
 
 const defaultOptions: ModuleOptions = {
     outFile: '',
     integrityHash: false,
+    modifyFile: false,
 };
 
 const entrypoints = new Map;
 let outFile = '';
 let json: Entrypoint;
-const hashes: Record<string, string> = {};
+let hashes: Record<string, string> = {};
 
 const createBuildStart = (moduleOptions: ModuleOptions) => (options: InputOptions) => {
     if (!outFile.length) {
@@ -74,16 +76,30 @@ const getEntrypointName = (filepath: InputOption): string => {
 const createWriteBundle = (moduleOptions: ModuleOptions) => (options: OutputOptions, bundle): void => {
     let bundleName = '';
 
-    if (typeof json === 'undefined') {
+    try {
+        if (moduleOptions.modifyFile && fs.existsSync(moduleOptions.outFile)) {
+            json = jsonfile.readFileSync(moduleOptions.outFile);
+        }
+    } catch (err) {
+        console.log(err);
+    }
+
+    if (typeof json === 'undefined' || typeof json.entrypoints === 'undefined') {
         json = {
             entrypoints: {},
         };
+    }
 
-        if (moduleOptions.integrityHash) {
-            json['integrity'] = {};
+    if (moduleOptions.integrityHash) {
+        if (typeof json.integrity === 'undefined') {
+            json.integrity = {};
+        } else {
+            hashes = json.integrity;
         }
     }
-    
+
+    const hashKeys = Object.keys(hashes);
+
     for (const filepath in bundle) {
         const type = getFileType(filepath);
         const rootDir = moduleOptions.rootDir || options.dir;
@@ -93,34 +109,42 @@ const createWriteBundle = (moduleOptions: ModuleOptions) => (options: OutputOpti
         }
 
         if (type !== FileType.map) {
-            if (typeof json['entrypoints'][bundleName] === 'undefined') {
-                json['entrypoints'][bundleName] = {};
+            if (typeof json.entrypoints[bundleName] === 'undefined') {
+                json.entrypoints[bundleName] = {};
             }
 
             const relPath = `${rootDir}/${filepath}`;
+            const file = (moduleOptions.integrityHash && bundle[filepath].isEntry) ? `${options.dir}/${filepath}` : `${options.dir}/${bundle[filepath].fileName}`;
 
-            if (moduleOptions.integrityHash && bundle[filepath].isEntry) {
-                hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(`${options.dir}/${filepath}`));
-            } else {
-                hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(`${options.dir}/${bundle[filepath].fileName}`));
-            }
+            const fileParsed = path.parse(file);
+            const fileNameSplit = fileParsed.base.split('.');
+            const fileExt = fileParsed.ext;
+
+            for (let i = 0; i < hashKeys.length; i += 1) {
+                const key = hashKeys[i];
+                const parseInfo = path.parse(key);
+                const splitInfo = parseInfo.base.split('.');
+                if (
+                    (parseInfo.ext === fileExt && fileExt === '.js' && splitInfo[0] === fileNameSplit[0] && splitInfo[1] === fileNameSplit[1]) ||
+                    (parseInfo.ext === fileExt && fileExt === '.css' && splitInfo[0] === fileNameSplit[0])
+                ) {
+                    delete hashes[key];
+                    break;
+                }
+            };
+
+            hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(file));
 
             if (isJavaScriptEntrypoint(filepath)) {
-                if (typeof json['entrypoints'][bundleName]['js'] === 'undefined') {
-                    json['entrypoints'][bundleName][FileType.js] = {};
+                if (typeof json.entrypoints[bundleName]['js'] === 'undefined') {
+                    json.entrypoints[bundleName][FileType.js] = {};
                 }
 
-                if (typeof json['entrypoints'][bundleName][FileType.js][options.format] === 'undefined') {
-                    json['entrypoints'][bundleName][FileType.js][options.format] = new Set;
-                }
-
-                json['entrypoints'][bundleName][type][options.format].add(relPath);
+                json.entrypoints[bundleName][FileType.js][options.format] = new Set();
+                json.entrypoints[bundleName][type][options.format].add(relPath);
             } else {
-                if (typeof json['entrypoints'][bundleName][type] === 'undefined') {
-                    json['entrypoints'][bundleName][FileType.css] = new Set;
-                }
-
-                json['entrypoints'][bundleName][FileType.css].add(relPath);
+                json.entrypoints[bundleName][FileType.css] = new Set();
+                json.entrypoints[bundleName][FileType.css].add(relPath);
             }
         }
     }
@@ -132,7 +156,7 @@ const createWriteBundle = (moduleOptions: ModuleOptions) => (options: OutputOpti
     jsonfile.writeFileSync(moduleOptions.outFile, json, {
         spaces: 2,
         replacer: jsonReplacer,
-     });
+    });
 }
 
 const isJavaScriptEntrypoint = (entrypoint: EntrypointUrl): entrypoint is EntrypointJavascriptUrl => {
@@ -157,7 +181,7 @@ const isFileType = (type: FileType): type is FileType => {
 
 const getFileType = (filepath: string): FileType => {
     const ext = path.parse(filepath)['ext'].slice(1);
-    
+
     if (isFileType(ext)) {
         return FileType[ext];
     } else {

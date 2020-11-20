@@ -39,7 +39,8 @@ var FileType;
 })(FileType || (FileType = {}));
 var defaultOptions = {
     outFile: '',
-    integrityHash: false
+    integrityHash: false,
+    modifyFile: false
 };
 var entrypoints = new Map;
 var outFile = '';
@@ -63,14 +64,28 @@ var getEntrypointName = function (filepath) {
 };
 var createWriteBundle = function (moduleOptions) { return function (options, bundle) {
     var bundleName = '';
-    if (typeof json === 'undefined') {
+    try {
+        if (moduleOptions.modifyFile && fs.existsSync(moduleOptions.outFile)) {
+            json = jsonfile.readFileSync(moduleOptions.outFile);
+        }
+    }
+    catch (err) {
+        console.log(err);
+    }
+    if (typeof json === 'undefined' || typeof json.entrypoints === 'undefined') {
         json = {
             entrypoints: {}
         };
-        if (moduleOptions.integrityHash) {
-            json['integrity'] = {};
+    }
+    if (moduleOptions.integrityHash) {
+        if (typeof json.integrity === 'undefined') {
+            json.integrity = {};
+        }
+        else {
+            hashes = json.integrity;
         }
     }
+    var hashKeys = Object.keys(hashes);
     for (var filepath in bundle) {
         var type = getFileType(filepath);
         var rootDir = moduleOptions.rootDir || options.dir;
@@ -78,30 +93,35 @@ var createWriteBundle = function (moduleOptions) { return function (options, bun
             bundleName = bundle[filepath].name;
         }
         if (type !== FileType.map) {
-            if (typeof json['entrypoints'][bundleName] === 'undefined') {
-                json['entrypoints'][bundleName] = {};
+            if (typeof json.entrypoints[bundleName] === 'undefined') {
+                json.entrypoints[bundleName] = {};
             }
             var relPath = rootDir + "/" + filepath;
-            if (moduleOptions.integrityHash && bundle[filepath].isEntry) {
-                hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(options.dir + "/" + filepath));
+            var file = (moduleOptions.integrityHash && bundle[filepath].isEntry) ? options.dir + "/" + filepath : options.dir + "/" + bundle[filepath].fileName;
+            var fileParsed = path.parse(file);
+            var fileNameSplit = fileParsed.base.split('.');
+            var fileExt = fileParsed.ext;
+            for (var i = 0; i < hashKeys.length; i += 1) {
+                var key = hashKeys[i];
+                var parseInfo = path.parse(key);
+                var splitInfo = parseInfo.base.split('.');
+                if ((parseInfo.ext === fileExt && fileExt === '.js' && splitInfo[0] === fileNameSplit[0] && splitInfo[1] === fileNameSplit[1]) ||
+                    (parseInfo.ext === fileExt && fileExt === '.css' && splitInfo[0] === fileNameSplit[0])) {
+                    delete hashes[key];
+                    break;
+                }
             }
-            else {
-                hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(options.dir + "/" + bundle[filepath].fileName));
-            }
+            hashes[relPath] = sriToolbox.generate({ algorithms: ['sha512'] }, fs.readFileSync(file));
             if (isJavaScriptEntrypoint(filepath)) {
-                if (typeof json['entrypoints'][bundleName]['js'] === 'undefined') {
-                    json['entrypoints'][bundleName][FileType.js] = {};
+                if (typeof json.entrypoints[bundleName]['js'] === 'undefined') {
+                    json.entrypoints[bundleName][FileType.js] = {};
                 }
-                if (typeof json['entrypoints'][bundleName][FileType.js][options.format] === 'undefined') {
-                    json['entrypoints'][bundleName][FileType.js][options.format] = new Set;
-                }
-                json['entrypoints'][bundleName][type][options.format].add(relPath);
+                json.entrypoints[bundleName][FileType.js][options.format] = new Set();
+                json.entrypoints[bundleName][type][options.format].add(relPath);
             }
             else {
-                if (typeof json['entrypoints'][bundleName][type] === 'undefined') {
-                    json['entrypoints'][bundleName][FileType.css] = new Set;
-                }
-                json['entrypoints'][bundleName][FileType.css].add(relPath);
+                json.entrypoints[bundleName][FileType.css] = new Set();
+                json.entrypoints[bundleName][FileType.css].add(relPath);
             }
         }
     }
