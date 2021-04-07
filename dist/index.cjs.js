@@ -59,6 +59,10 @@ var createBuildStart = function (moduleOptions) { return function (options) {
     });
 }; };
 var getEntrypointName = function (filepath) {
+    var _a;
+    if (Array.isArray(filepath)) {
+        _a = filepath, filepath = _a[0];
+    }
     var matches = filepath.match(/([a-z0-9-]+)\.ts/i);
     return (matches[1].length ? matches[1] : filepath);
 };

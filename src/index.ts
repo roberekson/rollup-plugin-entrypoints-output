@@ -69,6 +69,10 @@ const createBuildStart = (moduleOptions: ModuleOptions) => (options: InputOption
 };
 
 const getEntrypointName = (filepath: InputOption): string => {
+    if (Array.isArray(filepath)) {
+        [filepath] = filepath;
+    }
+
     const matches = (<string>filepath).match(/([a-z0-9-]+)\.ts/i);
     return (matches[1].length ? matches[1] : filepath) as string;
 }
